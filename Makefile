@@ -32,8 +32,8 @@ psp:
 #Compilation for debug
 $(client)dbg:
 	$(CC) $(CFLAGSDBG) cliente.c error_handlers.c -o $(client)
-$(server)dbg: $(pap)dbg $(psp)dbg
-	$(CC) $(CFLAGSDBG) server.c error_handlers.c - o $(server)
+$(server)dbg: $(pap)dbg 
+	$(CC) $(CFLAGSDBG) server.c error_handlers.c -o $(server)
 #Complementary processes
 $(pap)dbg:
 	$(CC) $(CFLAGS) $(pap).c -o $(pap) 

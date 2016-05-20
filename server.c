@@ -83,14 +83,14 @@ int main(int argc, char** argv){
             die("Erro na leitura da mensagem na fila");
         }
         
-        printf("Cliente com id %ld e mensagem %d\n", msgp->mtext.pid, msgp->mtext.pageN)   
+        printf("Cliente com id %d e mensagem %d\n", msgp->mtext.pid, msgp->mtext.pageN);
     }
 
     
     return 0;
 }
 
-void shutdownServer( int msqid, struct msqid_ds buff ){
+void shutdownServer( int msqid_1, struct msqid_ds buff ){
     //deleta a fila
     msgctl( msqid_1, IPC_RMID, &buff );
     printf("Server murdered\n");
