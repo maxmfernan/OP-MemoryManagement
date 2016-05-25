@@ -1,23 +1,27 @@
-gcc -Wall -std=c99 cliente.c error_handlers.c -o cliente
+gcc -Wall -g -std=c99 cliente.c error_handlers.c -o cliente
 In file included from cliente.c:10:0:
 /usr/include/x86_64-linux-gnu/sys/ipc.h:24:3: warning: #warning "Files using this header must be compiled with _GNU_SOURCE or _XOPEN_SOURCE" [-Wcpp]
  # warning "Files using this header must be compiled with _GNU_SOURCE or _XOPEN_SOURCE"
    ^
-cliente.c: In function ‘main’:
-cliente.c:24:11: warning: unused variable ‘input_path’ [-Wunused-variable]
-     char *input_path; //caminho do arquivo de entrada
-           ^
-gcc -Wall -std=c99 server.c error_handlers.c -o server
+gcc -Wall -std=c99 psp.c error_handlers.c -o psp
+In file included from psp.c:7:0:
+/usr/include/x86_64-linux-gnu/sys/ipc.h:24:3: warning: #warning "Files using this header must be compiled with _GNU_SOURCE or _XOPEN_SOURCE" [-Wcpp]
+ # warning "Files using this header must be compiled with _GNU_SOURCE or _XOPEN_SOURCE"
+   ^
+gcc -Wall -g -std=c99 -DDEBUG server.c error_handlers.c -o server
 In file included from server.c:8:0:
 /usr/include/x86_64-linux-gnu/sys/ipc.h:24:3: warning: #warning "Files using this header must be compiled with _GNU_SOURCE or _XOPEN_SOURCE" [-Wcpp]
  # warning "Files using this header must be compiled with _GNU_SOURCE or _XOPEN_SOURCE"
    ^
 server.c: In function ‘main’:
-server.c:20:17: warning: unused variable ‘s2_pid’ [-Wunused-variable]
-     int s1_pid, s2_pid;
-                 ^
-gcc -Wall -std=c99 pap.c -o pap
-pap.c: In function ‘main’:
-pap.c:18:13: warning: implicit declaration of function ‘kill’ [-Wimplicit-function-declaration]
-             kill( ppid, SIGKILL );
-             ^
+                                                       ^
+server.c:131:55: note: each undeclared identifier is reported only once for each function it appears in
+server.c:147:21: warning: implicit declaration of function ‘kill’ [-Wimplicit-function-declaration]
+                     kill( s1_pid, SIGUSR1 ); //acorda o PSP 
+                     ^
+server.c: In function ‘pageAllocator’:
+                                                         ^
+                        ^
+                                                       ^
+Makefile:36: recipe for target 'serverdbg' failed
+make: *** [serverdbg] Error 1

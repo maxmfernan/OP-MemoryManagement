@@ -10,12 +10,13 @@ client=cliente
 server=server
 pap=pap
 psp=psp
+shutdown=shutdown
 
-executables=$(client) $(server) $(pap) 
+executables=$(client) $(server) $(psp) 
 #----------------------------------------------------------------
-all: $(client) $(server) $(pap) 
+all: $(client) $(server) $(psp) $(shutdown)
 
-debug: $(client)dbg $(server)dbg
+debug: $(client)dbg $(server)dbg $(shutdown)dbg
 
 #Normal compilation
 $(client):
@@ -27,18 +28,24 @@ $(server):
 pap:
 	$(CC) $(CFLAGS) $(pap).c -o $@
 psp:
-	$(CC) $(CFLAGS) $(psp).c -o $@
+	$(CC) $(CFLAGS) $(psp).c error_handlers.c -o $@
+
+$(shutdown):
+	$(CC) $(CFLAGS) $(shutdown).c error_handlers.c -o $@
 
 #Compilation for debug
 $(client)dbg:
-	$(CC) $(CFLAGSDBG) cliente.c error_handlers.c -o $(client)
-$(server)dbg: $(pap)dbg 
-	$(CC) $(CFLAGSDBG) server.c error_handlers.c -o $(server)
+	$(CC) $(CFLAGSDBG) -DDEBUG cliente.c error_handlers.c -o $(client)
+$(server)dbg: $(psp)dbg 
+	$(CC) $(CFLAGSDBG) -DDEBUG server.c error_handlers.c -o $(server)
 #Complementary processes
 $(pap)dbg:
 	$(CC) $(CFLAGS) $(pap).c -o $(pap) 
 $(psp)dbg:
-	$(CC) $(CFLAGS) $(psp).c -o $(psp)
+	$(CC) $(CFLAGS) $(psp).c error_handlers.c -o $(psp)
+
+$(shutdown)dbg:
+	$(CC) $(CFLAGS) -DDEBUG $(shutdown).c error_handlers.c -o $(shutdown)
 
 #Run sever
 runs:

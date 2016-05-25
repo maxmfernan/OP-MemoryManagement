@@ -20,8 +20,10 @@ void referencia_pagina(msg_t msg, int msqid_1);
 
 int main(int argc, char **argv){
     int msqid_1; //id da primeira fila
+    int idshm_3; //id da memoria compartilhada
+    pid_t *pshm_pids;
     FILE *input_fp; //stream do arquivo de entrada. p de pointer
-    char *input_path; //caminho do arquivo de entrada
+    //char *input_path; //caminho do arquivo de entrada
     char r_pages[RPNUM_MAX]; //vetor com as pa'ginas requisitadas
     int aux_idx = 0; //i'ndice de prop'osito geral usado para iterar sobre algumas EDs.
     msg_t msg; //mensagem que ser'a enviada para o servidor
@@ -51,14 +53,25 @@ int main(int argc, char **argv){
     aux_idx = 0;
 
    //Obtem id da fila de mensagens
-    if( ( msqid_1 = msgget(0x116175, 0x1ff) ) < 0 ){   
+    if( ( msqid_1 = msgget(0x116170, 0x1ff) ) < 0 ){   
         die("Erro na obtencao do id da fila de mensagens.");
     }
+    //Guarda id de todo mundo que morrera com o shutdown                                           
+    //Na primeira posicao guarda a quantidade de elemntos validos no vetor
+    if( ( idshm_3 = shmget(0x116176, ( CLIENTP_MAX + 2 )*sizeof( pid_t ), 0x1ff) ) < 0 ){
+        die("Erro na obtencao da memoria compartilhada");
+    }
+    if( ( pshm_pids = shmat( idshm_3, NULL, 0 ) ) == ( pid_t*) -1 ){
+        die("Erro no attach");
+    }
+    //SEMAFORO
+    pshm_pids[0]++;
+    pshm_pids[pshm_pids[0]] = getpid();
 
     while( r_pages[aux_idx] != '\0' ){
         msg.msgtype = getpid(); //valor diferente de zero
         msg.mtext.pid = getpid();
-        msg.mtext.pageN =  r_pages[aux_idx] - '0' ; //a little bit of hackish
+        msg.mtext.pageN =  r_pages[aux_idx] - '0'; //a little bit of hackish
         aux_idx++;
         referencia_pagina( msg, msqid_1 ); 
     } 
