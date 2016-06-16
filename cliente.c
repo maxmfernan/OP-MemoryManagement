@@ -1,4 +1,6 @@
 #define STD_LIBS
+#define IPC_LIBS
+#define IPC_SEM
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -10,18 +12,23 @@
 #include <sys/ipc.h>
 #include <sys/shm.h> // memoria compartilhada
 #include <sys/msg.h> // fila de mensagens
+#include <sys/sem.h>
+#include <signal.h>
 
 //Bibliotecas do usuario
 #include "tipos.h"
 #include "error_handlers.h"
+#include "semaphor_util.h"
 
 #define RPNUM_MAX 50
 void referencia_pagina(msg_t msg, int msqid_1);
+pid_t *pshm_pids;
 
+void shutdownClient(int);
 int main(int argc, char **argv){
     int msqid_1; //id da primeira fila
     int idshm_3; //id da memoria compartilhada
-    pid_t *pshm_pids;
+   //pid_t *pshm_pids;
     FILE *input_fp; //stream do arquivo de entrada. p de pointer
     //char *input_path; //caminho do arquivo de entrada
     char r_pages[RPNUM_MAX]; //vetor com as pa'ginas requisitadas
@@ -56,18 +63,35 @@ int main(int argc, char **argv){
     if( ( msqid_1 = msgget(0x116170, 0x1ff) ) < 0 ){   
         die("Erro na obtencao do id da fila de mensagens.");
     }
-    //Guarda id de todo mundo que morrera com o shutdown                                           
+    //Guarda id de todo mundo que morrera' com o shutdown                                           
     //Na primeira posicao guarda a quantidade de elemntos validos no vetor
-    if( ( idshm_3 = shmget(0x116176, ( CLIENTP_MAX + 2 )*sizeof( pid_t ), 0x1ff) ) < 0 ){
+    sleep(1); //pra dar tempo do servidor criar tudo
+    if( ( idshm_3 = shmget(0x116178, ( CLIENTP_MAX + 2 )*sizeof( pid_t ), 0x1ff) ) < 0 ){
         die("Erro na obtencao da memoria compartilhada");
     }
     if( ( pshm_pids = shmat( idshm_3, NULL, 0 ) ) == ( pid_t*) -1 ){
         die("Erro no attach");
     }
+    //Obtem id do sema'foro
+    if( ( idsem = semget( 0x116171, 0, 0x1ff ) ) < 0 ){
+        die("Erro na criacao do semaforo.");
+    }
+    signal( SIGTERM, shutdownClient );
     //SEMAFORO
+    p_sem(1);//segundo sema'foro 
+    #ifdef DEBUG
+        printf("Entrei no semaforo\n");
+    #endif
     pshm_pids[0]++;
     pshm_pids[pshm_pids[0]] = getpid();
-
+    #ifdef DEBUG
+        printf("pshm_pids[0] %d\n",pshm_pids[0]);
+        printf("pshm_pids[pshm_pids[0]] %d\n",pshm_pids[pshm_pids[0]]);
+    #endif
+    v_sem(1);
+    #ifdef DEBUG
+        printf("Sai do semaforo\n");
+    #endif
     while( r_pages[aux_idx] != '\0' ){
         msg.msgtype = getpid(); //valor diferente de zero
         msg.mtext.pid = getpid();
@@ -84,4 +108,11 @@ void referencia_pagina(msg_t msg, int msqid_1){
     if( ( msgsnd( msqid_1, &msg, sizeof( i_msgF), 0 ) ) < 0 ){
         die("Erro no envio da mensagem.\n");
     }
+}
+
+void shutdownClient(int a){
+    //deattach na memo'ria compartilhada
+    shmdt( pshm_pids );//registro do ids de todos os clientes
+    printf( "Client %d murdered\n", getpid() );
+    exit(0);
 }

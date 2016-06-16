@@ -1,4 +1,6 @@
 #define STD_LIBS
+#define IPC_LIBS
+#define IPC_SEM 
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -9,10 +11,12 @@
 #include <sys/shm.h>
 #include <sys/msg.h> // fila de mensagens
 #include <signal.h>
+#include <sys/sem.h>
 
 //Bibliotecas do usuario
 #include "tipos.h"
 #include "error_handlers.h"
+#include "semaphor_util.h"
 
 ////Server utilities 
 //#define NUMERO_FRAMES 10
@@ -21,7 +25,7 @@
 //#define CLIENTP_MAX 10 //a professora disse que seria 5. CLIENT PROCESS
 
 //Server utilities
-void shutdownServer( );
+void shutdownServer(int);
 
 int pageAllocator(  msg_t *msg, pf_his_t *clt_pfh, unsigned int *gen_pfh, frame_t *pshm_frms, \
 unsigned int *pshm_cufrms );
@@ -32,8 +36,13 @@ int s1_pid; //
 int idshm_1, idshm_2, idshm_3;
 int msqid_1;
 //variaveis para registro do historio de page fault
+pf_his_t clients_pfh[CLIENTP_MAX]; // clients page fault history
+unsigned int general_pfh;
+//Variaveis para guardar o endereco das memo'ria compartilhadas
 frame_t *pshm_frms;
 unsigned int *pshm_cufrms; //counter used frames
+pid_t *pshm_pids;
+unsigned lrused;
 
 int main(int argc, char** argv){
     //int s1_pid; //
@@ -42,16 +51,22 @@ int main(int argc, char** argv){
     //int idshm_1, idshm_2, idshm_3;
     //frame_t *pshm_frms;
     //unsigned int *pshm_cufrms; //counter used frames
-    pid_t *pshm_pids;
+    //pid_t *pshm_pids;
 
     //Vari'veis relacionadas a fila de mensagem
     //int msqid_1;
+
+    //Valor inicial do sema'foro.
+    //A inicializacao propriamente dita ser'a feita abaixo
+    semun_t init_sem;
+    init_sem.val = 1;
+
     msg_t *msgp = (msg_t*) malloc( sizeof(msg_t) );
 
     //Varia'veis de histo'rico.
     //Serao responsa'veis por contar os page fault gerais e por pa'gina.
-    pf_his_t clients_pfh[CLIENTP_MAX]; // clients page fault history
-    unsigned int general_pfh = 0;
+    //pf_his_t clients_pfh[CLIENTP_MAX]; // clients page fault history
+    //unsigned int general_pfh = 0;
     //inicializacao
     for( int i = 0 ; i < CLIENTP_MAX; i++){
         clients_pfh[i].pid = 0;
@@ -63,6 +78,18 @@ int main(int argc, char** argv){
     //frame_t frames[NUMERO_FRAMES]; 
     //unsigned int cused_frames = 0; //counter used frames
 
+    if( ( idsem = semget( 0x116171, 2, IPC_CREAT | 0x1ff ) ) < 0 ){//Criacao do sema'foro
+        die("Erro na criacao do semaforo.");
+    }
+    //Inicializacao do sema'foro
+    //Primeiro
+    if( semctl( idsem, 0, SETVAL, init_sem )  < 0 ){
+        die("Erro na inicializacao do semaforo 1.\n");
+    }
+    if( semctl( idsem, 1, SETVAL, init_sem )  < 0 ){
+        die("Erro na inicializacao do semaforo 2.\n");
+    }
+   
     //Ciria fila de mensagens
     if( ( msqid_1 = msgget(0x116170, IPC_CREAT | 0x1ff) ) < 0 ){   
         die("Erro na criacao da fila de mensagens.");
@@ -85,18 +112,30 @@ int main(int argc, char** argv){
     }
     //Guarda id de todo mundo que morrera com o shutdown                                           
     //Na primeira posicao guarda a quantidade de elemntos validos no vetor
+    //qtd de clientes + servidor. A primeira posicao guarda a qtd de ids.
    if( ( idshm_3 = shmget(0x116178, ( CLIENTP_MAX + 2 )*sizeof( pid_t ), IPC_CREAT | 0x1ff) ) < 0 ){
         die("Erro na criacao da memoria compartilhada");
     }
-    if( ( pshm_pids = shmat( idshm_1, NULL, 0 ) ) == ( pid_t*) -1 ){
+    if( ( pshm_pids = shmat( idshm_3, NULL, 0 ) ) == ( pid_t*) -1 ){
         die("Erro no attach");
     }
-    for( int i = 0; i <= CLIENTP_MAX; i++){
+    p_sem(1);
+    for( int i = 0; i <= (CLIENTP_MAX + 1); i++){
         pshm_pids[i]=0;
+        #ifdef DEBUG
+            printf("Zerando pshm_pids %d\n", i);
+        #endif
     } 
-    //SEMAFORO
+    v_sem(1);
+
+    //SEMAFORO diferente
+    p_sem(1);
     pshm_pids[0]++;
     pshm_pids[pshm_pids[0]] = getpid();
+    #ifdef DEBUG
+        printf("pshm_pids[pshm_pids[0]] %d\n", pshm_pids[pshm_pids[0]]);
+    #endif
+    v_sem(1);
     
     #ifdef DEBUG
         printf("\npshm_pids %d\n", pshm_pids[0]);
@@ -109,6 +148,7 @@ int main(int argc, char** argv){
         printf("msqid %d\n", msqid_1);
         printf("idshm_1 %d\n", idshm_1);
         printf("idshm_2 %d\n", idshm_2);
+        printf("idshm_3 %d\n", idshm_3);
     #endif
     //Zera os contadores que indicam uso recente do frame.
     //Zera o indicador de uso
@@ -175,27 +215,33 @@ int main(int argc, char** argv){
             //Para iteracao seguinte
             achei = 0;
             comutador = 0;
-
-            switch( pageAllocator( msgp, clients_pfh, &general_pfh, pshm_frms, pshm_cufrms) ){
-                case 0:
-                    #ifdef DEBUG
-                        printf("Caso 0 do switch\n");
-                    #endif
-                    break;
-                case 1:
-                    clients_pfh[aux_idx].pf_counter++;      
-                    general_pfh++;
-                    break;
-                case 2:
-                    #ifdef DEBUG
-                        printf("Caso 2 do switch\n");
-                    #endif
-                    clients_pfh[aux_idx].pf_counter++;      
-                    kill( s1_pid, SIGUSR1 ); //acorda o PSP 
-                    break;
-                default:
-                    die("Erro no pageAllocator. Valor de retorno nao esperado.\n");
-            }
+            //while( 1 ){
+                switch( pageAllocator( msgp, clients_pfh, &general_pfh, pshm_frms, pshm_cufrms) ){
+                    case 0:
+                        #ifdef DEBUG
+                            printf("Caso 0 do switch\n");
+                        #endif
+                        break;
+                    case 1:
+                        clients_pfh[aux_idx].pf_counter++;      
+                        general_pfh++;
+                        #ifdef DEBUG
+                            printf("PageFault id %d\n", clients_pfh[aux_idx].pid);
+                            printf("PageFault counter %d\n", clients_pfh[aux_idx].pf_counter);
+                        #endif
+                        break;
+                    case 2:
+                        #ifdef DEBUG
+                            printf("Caso 2 do switch\n");
+                        #endif
+                        clients_pfh[aux_idx].pf_counter++;      
+                        kill( s1_pid, SIGUSR1 ); //acorda o PSP 
+                        continue;
+                    default:
+                        die("Erro no pageAllocator. Valor de retorno nao esperado.\n");
+                }
+                //break;
+            //}
             
             //printf("Cliente com id %d e mensagem %d\n", msgp->mtext.pid, msgp->mtext.pageN);
         }
@@ -213,7 +259,7 @@ unsigned int *pshm_cufrms){
 
     unsigned int aux_idx = 0; // artifi'cio para nao precisar percorrer o vertor de frames 2 vezes
     unsigned int comutador = 0;
-    
+   
     //SEMA'FORO
     //Verifica se a pagina requisitada est'a alocada
     //Se o contador de recentemente usado for zero significa que o frame est'a livre.
@@ -230,7 +276,10 @@ unsigned int *pshm_cufrms){
         if( pshm_frms[i].rusedc != 0 ){//frame ocupado?
             if( msg->msgtype == pshm_frms[i].pid && msg->mtext.pageN == pshm_frms[i].page ){
                 //incremento o contador de pagina recentemente usada
+                //p_sem();
+                //lrused++;
                 pshm_frms[i].rusedc++;
+                //v_sem();
                 //pagina no frame
                 #ifdef DEBUG
                     printf("\nRetornando do alocador com valor 0\n");
@@ -255,12 +304,14 @@ unsigned int *pshm_cufrms){
     #ifdef DEBUG
         printf("Valor do pshm_cufrms %d", *pshm_cufrms);
     #endif
+    //p_sem();
     if( *pshm_cufrms < MAX_OCUPACAO ){
         //Se entrou e' porque tem espaco no vertor de frames
         //O espaco livre est'a indicado por aux_idx.
         pshm_frms[aux_idx].pid = msg->msgtype; 
         pshm_frms[aux_idx].page = msg->mtext.pageN; 
-        pshm_frms[aux_idx].rusedc++; //contador de pagina recentemente usada
+        //lrused++;
+        pshm_frms[aux_idx].rusedc++; //= lrused; //contador de pagina recentemente usada
         (*pshm_cufrms)++;
         #ifdef DEBUG
                 printf("\nAlocador retorna 1\n");
@@ -271,20 +322,33 @@ unsigned int *pshm_cufrms){
                 printf("Valores no frame:\n");
                 printf("Id %d Pagina %d\n", pshm_frms[aux_idx].pid, pshm_frms[aux_idx].page);
         #endif
-
+        //v_sem();
         return 1;
     }
+    //v_sem();
     
     return 2;
 }
 
-void shutdownServer( ){
+void shutdownServer(int a){
     struct msqid_ds buff; 
     struct shmid_ds shm_buff;
     
-    //Mata o filho
-    kill( SIGKILL, s1_pid );
+    //Manda sinal para o psp.c finalizar.
+    kill( s1_pid, SIGTERM );
 
+    //Histo'rico de page faults
+    printf("------------------------------\n");
+    printf("%s%23s\n", "ID", "page fault");
+    for( int i = 0; i < CLIENTP_MAX; i++ ){
+        if( clients_pfh[i].pid != 0 ){
+            printf("%-17d", clients_pfh[i].pid);
+            printf("%2s%u\n", " ", clients_pfh[i].pf_counter);   
+        }
+    }
+    printf("Numero total de page faults: %d\n", general_pfh);
+
+    //Imprecao da tabela 
     printf("------------------------------\n");
     printf("%s%23s%24s\n", "ID", "pagina", "Tempo de referencia");
     for(int i = 0; i < NUMERO_FRAMES; i++){
@@ -298,16 +362,26 @@ void shutdownServer( ){
         printf("%2s%-3d", " ", pshm_frms[i].page);
         printf("%8s%-3d\n", " ", pshm_frms[i].rusedc);
     }
+    
+    //Manda que cada cliente finalize
+
     //deleta a fila
     msgctl( msqid_1, IPC_RMID, &buff );
     //deleta as memorias compartilhadas
+
+    shmdt( pshm_frms );//vetor de frames
+    shmdt( pshm_cufrms );//contador de frames usados
+    shmdt( pshm_pids );//registro do ids de todos os clientes
+    //sleep( 2 );
     shmctl( idshm_1, IPC_RMID, &shm_buff); 
     shmctl( idshm_2, IPC_RMID, &shm_buff); 
     shmctl( idshm_3, IPC_RMID, &shm_buff); 
+
+    //deleta sema'foro
+    semctl( idsem, 0,  IPC_RMID );
     
     printf("Server murdered\n");
     kill(0); //se mata
     
-    return;
 }
 

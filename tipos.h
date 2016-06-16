@@ -1,5 +1,7 @@
+#ifndef IPC_LIBS
 #include <unistd.h> //execl() etc
 #include <sys/types.h>
+#endif 
 
 //Server utilities 
 #define NUMERO_FRAMES 10

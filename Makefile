@@ -1,8 +1,8 @@
 #variables-------------------------------------------------------
 CC=gcc
-
-CFLAGS=-Wall -std=c99
-CFLAGSDBG=-Wall -g -std=c99
+ECFLAGS=-D_XOPEN_SOURCE=700
+CFLAGS=-Wall -std=c99 
+CFLAGSDBG=-Wall -g -std=c99 
 
 LLIB=-lm
 
@@ -12,7 +12,7 @@ pap=pap
 psp=psp
 shutdown=shutdown
 
-executables=$(client) $(server) $(psp) 
+executables=$(client) $(server) $(psp) $(shutdown) 
 #----------------------------------------------------------------
 all: $(client) $(server) $(psp) $(shutdown)
 
